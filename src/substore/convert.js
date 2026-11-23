@@ -167,8 +167,8 @@ const rules = [
   'geosite,category-games,游戏平台',
   'geosite,category-scholar-cn,全球直连',
   'geosite,category-scholar-!cn,学术资源',
-  'rule-set,crypto,加密货币',
   'rule-set,mining,加密货币',
+  'rule-set,crypto,加密货币',
   'geosite,category-cryptocurrency,加密货币',
   'geosite,apple@cn,全球直连',
   'geosite,apple,Apple',
@@ -808,10 +808,10 @@ function buildProxyGroups(
         icon: countryIconURLs[country],
         type: 'fallback',
         url: 'http://cp.cloudflare.com/generate_204',
-        interval: 60,
+        interval: nodes.length === 1 ? 300 : 60,
         timeout: 3000,
         'max-failed-times': 2,
-        lazy: false,
+        lazy: nodes.length === 1,
         proxies: [...nodes]
       }))
     : [];

@@ -850,10 +850,10 @@ rules:
   - geosite,category-scholar-cn,全球直连
   - AND,((DST-PORT,443),(NETWORK,UDP),(geosite,category-scholar-!cn)),REJECT
   - geosite,category-scholar-!cn,学术资源
-  - AND,((DST-PORT,443),(NETWORK,UDP),(rule-set,crypto)),REJECT
-  - rule-set,crypto,加密货币
   - AND,((DST-PORT,443),(NETWORK,UDP),(rule-set,mining)),REJECT
   - rule-set,mining,加密货币
+  - AND,((DST-PORT,443),(NETWORK,UDP),(rule-set,crypto)),REJECT
+  - rule-set,crypto,加密货币
   - AND,((DST-PORT,443),(NETWORK,UDP),(geosite,category-cryptocurrency)),REJECT
   - geosite,category-cryptocurrency,加密货币
   - geosite,apple@cn,全球直连

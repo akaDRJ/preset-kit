@@ -1016,7 +1016,7 @@ test('IX selector keeps only IX nodes and pre-proxy chooses independent transit 
   assert.deepEqual(groups['中转手动切换'].proxies, ['🇭🇰 NX 香港 01', '🇭🇰 YT 香港 01']);
 });
 
-test('automatic groups share probes while regional groups are lazy and fallback remains active', () => {
+test('automatic groups share probes while regional and single-member landing groups are lazy', () => {
   for (const regex of [false, true]) {
     for (const smart of [false, true]) {
       const result = loadAkcdnFallbackConvert({ regex, smart }).main({
@@ -1035,8 +1035,8 @@ test('automatic groups share probes while regional groups are lazy and fallback 
       assert.equal(groups['DNS代理'], undefined);
       for (const name of ['台湾落地']) {
         assert.equal(groups[name].url, 'http://cp.cloudflare.com/generate_204', name);
-        assert.equal(groups[name].interval, 60, name);
-        assert.equal(groups[name].lazy, false, name);
+        assert.equal(groups[name].interval, 300, name);
+        assert.equal(groups[name].lazy, true, name);
       }
       assert.equal(groups['IX节点'].type, 'select');
       assert.deepEqual(groups['IX节点'].proxies, ['台湾 IX 01']);
@@ -1056,13 +1056,14 @@ test('country landings contain only their own nodes in enumerated, regex and sma
           { name: '🇸🇬 落地 新加坡 01 AnyTLS', type: 'anytls', 'dialer-proxy': '前置代理' },
           { name: '香港 01', type: 'ss' },
           { name: '落地 台湾 01', type: 'ss', 'dialer-proxy': '前置代理' },
+          { name: '落地 台湾 02', type: 'ss', 'dialer-proxy': '前置代理' },
           { name: '家宽 日本 01', type: 'ss' }
         ]
       });
       const groups = Object.fromEntries(result['proxy-groups'].map((group) => [group.name, group]));
       const landing = groups['台湾落地'];
       assert.equal(landing.type, 'fallback');
-      assert.deepEqual(landing.proxies, ['落地 台湾 01']);
+      assert.deepEqual(landing.proxies, ['落地 台湾 01', '落地 台湾 02']);
       assert.deepEqual(groups['新加坡落地'].proxies, ['🇸🇬 落地 新加坡 01 AnyTLS']);
       assert.deepEqual(groups['日本落地'].proxies, ['家宽 日本 01']);
       assert.equal(groups['落地节点'], undefined);
