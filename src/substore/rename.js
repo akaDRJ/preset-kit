@@ -9,7 +9,7 @@
  * 使用：
  * - 在 Sub-Store 脚本操作中添加本脚本，URL 后接 # 参数
  * - 多个参数用 & 分隔；参数值会按 URL component 解码，值里含 &、=、% 等字符时请先 URL 编码
- * - 示例：https://raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/substore/rename.js#flag=true&name=NX&rmkey=Premium
+ * - 示例：https://raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/substore/rename.js#flag=true&name=NX&rmkey=Premium
  * - 禁用缓存：在 URL 末尾添加 #noCache
  *
  * ==================== 核心参数 ====================

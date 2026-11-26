@@ -19,8 +19,8 @@ const rootPublicFiles = [
   'rename.js',
   'convert-overseas-to-cn.js',
   'config.yaml',
-  'config_substore.yaml',
-  'DRJCustomRule_3.0.ini',
+  'template.yaml',
+  'preset.ini',
   'ai.yaml',
   'crypto.yaml',
   'forcedirect.yaml',
@@ -40,7 +40,7 @@ const rootPublicFiles = [
 ];
 
 function withTempDir(run) {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clashcustomrule-test-'));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'preset-kit-test-'));
   try {
     return run(tempDir);
   } finally {
@@ -80,8 +80,8 @@ test('repository separates source, generated output, and legacy code', () => {
   assert.equal(fs.existsSync(path.join(repoRoot, 'dist', 'substore', 'convert-akcdn-fallback.js')), false);
   assert.equal(fs.existsSync(path.join(repoRoot, 'dist', 'substore', 'rename.js')), true);
   assert.equal(fs.existsSync(path.join(repoRoot, 'dist', 'configs', 'config.yaml')), true);
-  assert.equal(fs.existsSync(path.join(repoRoot, 'dist', 'configs', 'config_substore.yaml')), true);
-  assert.equal(fs.existsSync(path.join(repoRoot, 'dist', 'configs', 'DRJCustomRule_3.0.ini')), true);
+  assert.equal(fs.existsSync(path.join(repoRoot, 'dist', 'configs', 'template.yaml')), true);
+  assert.equal(fs.existsSync(path.join(repoRoot, 'dist', 'configs', 'preset.ini')), true);
   assert.equal(fs.existsSync(path.join(repoRoot, 'dist', 'rulesets', 'yaml', 'ai.yaml')), true);
   assert.equal(fs.existsSync(path.join(repoRoot, 'dist', 'rulesets', 'mrs', 'ai.mrs')), true);
 });
@@ -89,10 +89,10 @@ test('repository separates source, generated output, and legacy code', () => {
 test('readme documents the current public dist layout', () => {
   const readme = fs.readFileSync(path.join(repoRoot, 'README.md'), 'utf8');
 
-  const raw = 'https://raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/';
+  const raw = 'https://raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/';
   for (const file of [
     'substore/convert.js', 'substore/rename.js', 'configs/config.yaml',
-    'configs/config_substore.yaml', 'configs/DRJCustomRule_3.0.ini'
+    'configs/template.yaml', 'configs/preset.ini'
   ]) {
     assert.ok(readme.includes(`(${raw}${file})`), file);
   }
@@ -424,15 +424,15 @@ test('lint-rules ignores duplicate proxy entries in config files but still repor
   });
 });
 
-test('sync-drjcustomrule-3 preserves regex filters and explicit probe URLs', () => {
+test('build-ini preserves regex filters and explicit probe URLs', () => {
   withTempDir((tempDir) => {
     const scriptsDir = path.join(tempDir, 'scripts');
     const substoreDir = path.join(tempDir, 'src', 'substore');
     fs.mkdirSync(scriptsDir, { recursive: true });
     fs.mkdirSync(substoreDir, { recursive: true });
     fs.copyFileSync(
-      path.join(repoRoot, 'scripts', 'sync-drjcustomrule-3.js'),
-      path.join(scriptsDir, 'sync-drjcustomrule-3.js')
+      path.join(repoRoot, 'scripts', 'build-ini.js'),
+      path.join(scriptsDir, 'build-ini.js')
     );
 
     fs.writeFileSync(
@@ -471,7 +471,7 @@ test('sync-drjcustomrule-3 preserves regex filters and explicit probe URLs', () 
 
     const result = spawnSync(
       process.execPath,
-      [path.join(scriptsDir, 'sync-drjcustomrule-3.js')],
+      [path.join(scriptsDir, 'build-ini.js')],
       {
         cwd: tempDir,
         encoding: 'utf8'
@@ -481,7 +481,7 @@ test('sync-drjcustomrule-3 preserves regex filters and explicit probe URLs', () 
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const rendered = fs.readFileSync(
-      path.join(tempDir, 'dist', 'configs', 'DRJCustomRule_3.0.ini'),
+      path.join(tempDir, 'dist', 'configs', 'preset.ini'),
       'utf8'
     );
     const groupLine = rendered
@@ -1113,7 +1113,7 @@ test('package exposes one-shot test and check scripts', () => {
   assert.match(manifest.scripts.check, /npm run test/);
   assert.match(manifest.scripts.check, /npm run check:substore/);
   assert.match(manifest.scripts.check, /npm run check:configs/);
-  assert.match(manifest.scripts.check, /npm run check:drj3/);
+  assert.match(manifest.scripts.check, /npm run check:ini/);
   assert.match(manifest.scripts.check, /npm run lint:rules -- --strict/);
   assert.match(manifest.scripts.check, /npm run check:rename-dict/);
   assert.equal(manifest.scripts['build:substore'], 'node scripts/build-substore.js');
@@ -1147,7 +1147,7 @@ test('build-configs uses the yaml package instead of a hand-rolled emitter', () 
 });
 
 test('generated configs avoid yaml anchors and aliases for client compatibility', () => {
-  for (const file of ['config.yaml', 'config_substore.yaml']) {
+  for (const file of ['config.yaml', 'template.yaml']) {
     const raw = fs.readFileSync(path.join(repoRoot, 'dist', 'configs', file), 'utf8');
 
     assert.doesNotMatch(raw, /&a\d+/);
@@ -1161,7 +1161,7 @@ test('convert and generated configs use available bett-rules geodata assets', ()
 
   const keys = ['geoip', 'geosite', 'mmdb', 'asn'];
 
-  for (const file of ['config.yaml', 'config_substore.yaml']) {
+  for (const file of ['config.yaml', 'template.yaml']) {
     const raw = fs.readFileSync(path.join(repoRoot, 'dist', 'configs', file), 'utf8');
     const parsed = YAML.parse(raw);
     const geoxBlock = raw.match(/^geox-url:\n(?<body>(?:  .+\n)+)/m);

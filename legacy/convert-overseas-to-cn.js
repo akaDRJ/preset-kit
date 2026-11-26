@@ -80,12 +80,12 @@ function textProvider(name, hostPath) {
 }
 
 const ruleProviders = {
-  outlook:       yamlProvider('outlook', 'akaDRJ/ClashCustomRule/master/outlook.yaml'),
-  pt:            yamlProvider('pt', 'akaDRJ/ClashCustomRule/master/pt.yaml'),
-  crypto:        yamlProvider('crypto', 'akaDRJ/ClashCustomRule/master/crypto.yaml'),
-  mining:        yamlProvider('mining', 'akaDRJ/ClashCustomRule/master/mining.yaml'),
-  forceproxy:    yamlProvider('forceproxy', 'akaDRJ/ClashCustomRule/master/forceproxy.yaml'),
-  forcedirect:   yamlProvider('forcedirect', 'akaDRJ/ClashCustomRule/master/forcedirect.yaml'),
+  outlook:       yamlProvider('outlook', 'akaDRJ/preset-kit/master/dist/rulesets/yaml/outlook.yaml'),
+  pt:            yamlProvider('pt', 'akaDRJ/preset-kit/master/dist/rulesets/yaml/pt.yaml'),
+  crypto:        yamlProvider('crypto', 'akaDRJ/preset-kit/master/dist/rulesets/yaml/crypto.yaml'),
+  mining:        yamlProvider('mining', 'akaDRJ/preset-kit/master/dist/rulesets/yaml/mining.yaml'),
+  forceproxy:    yamlProvider('forceproxy', 'akaDRJ/preset-kit/master/dist/rulesets/yaml/forceproxy.yaml'),
+  forcedirect:   yamlProvider('forcedirect', 'akaDRJ/preset-kit/master/dist/rulesets/yaml/forcedirect.yaml'),
   fakeipfilter:  mrsProvider('fakeipfilter', 'github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/fakeip-filter.mrs'),
   cnsite:        mrsProvider('cnsite', 'github.com/DustinWin/ruleset_geodata/releases/download/mihomo-ruleset/cn.mrs'),
   cdn:           textProvider('cdn', 'ruleset.skk.moe/Clash/non_ip/cdn.txt')

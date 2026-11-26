@@ -1,12 +1,12 @@
-# ClashCustomRule
+# Preset Kit
 
-- **Sub-Store scripts:** [Convert](https://raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/substore/convert.js) · [Rename](https://raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/substore/rename.js)
-- **Configs:** [Mihomo YAML](https://raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/configs/config.yaml) · [Sub-Store YAML](https://raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/configs/config_substore.yaml) · [DRJCustomRule INI](https://raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/configs/DRJCustomRule_3.0.ini)
+- **Scripts:** [Convert](https://raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/substore/convert.js) · [Rename](https://raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/substore/rename.js)
+- **Configs:** [Config](https://raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/configs/config.yaml) · [Template](https://raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/configs/template.yaml) · [Preset](https://raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/configs/preset.ini)
 - **Rulesets:** [YAML](dist/rulesets/yaml/) · [MRS](dist/rulesets/mrs/)
 
 ## Maintenance
 
-Edit the [sources](src/), then rebuild and check with `mihomo` on your PATH:
+Edit the [sources](src/), then rebuild and check using the [CI toolchain](.github/workflows/check.yml):
 
 ```sh
 npm ci

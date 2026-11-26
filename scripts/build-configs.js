@@ -163,7 +163,7 @@ const targets = [
     }
   },
   {
-    file: 'config_substore.yaml',
+    file: 'template.yaml',
     keepProxies: false,
     keepProxyProviders: false,
     base: {

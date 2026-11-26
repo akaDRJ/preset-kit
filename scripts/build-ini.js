@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const rootDir = path.resolve(__dirname, '..');
-const iniPath = path.join(rootDir, 'dist', 'configs', 'DRJCustomRule_3.0.ini');
+const iniPath = path.join(rootDir, 'dist', 'configs', 'preset.ini');
 const isCheckMode = process.argv.includes('--check');
 
 global.$arguments = { regex: 'true' };
@@ -199,20 +199,20 @@ const current = fs.existsSync(iniPath) ? fs.readFileSync(iniPath, 'utf8') : '';
 
 if (isCheckMode) {
   if (current !== rendered) {
-    console.error('dist/configs/DRJCustomRule_3.0.ini is out of date. Run: npm run sync:drj3');
+    console.error('dist/configs/preset.ini is out of date. Run: npm run build:ini');
     process.exit(1);
   }
-  console.log('dist/configs/DRJCustomRule_3.0.ini is up-to-date.');
+  console.log('dist/configs/preset.ini is up-to-date.');
   process.exit(0);
 }
 
 if (current === rendered) {
-  console.log('No changes needed. dist/configs/DRJCustomRule_3.0.ini is already synced.');
+  console.log('No changes needed. dist/configs/preset.ini is already synced.');
   process.exit(0);
 }
 
 fs.mkdirSync(path.dirname(iniPath), { recursive: true });
 fs.writeFileSync(iniPath, rendered);
 console.log(
-  `WROTE dist/configs/DRJCustomRule_3.0.ini (${rulesetLines.length} rulesets, ${proxyGroupLines.length} groups).`
+  `WROTE dist/configs/preset.ini (${rulesetLines.length} rulesets, ${proxyGroupLines.length} groups).`
 );

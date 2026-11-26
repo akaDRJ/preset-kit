@@ -55,19 +55,19 @@
  * ==================== 使用示例 ====================
  *
  * 基础转换（默认配置，阻止 QUIC，枚举节点）：
- * https://raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/substore/convert.js
+ * https://raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/substore/convert.js
  *
  * 完整配置 + 落地节点 + 负载均衡 + 正则模式：
- * https://raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/substore/convert.js#full=true&landing=true&loadbalance=true&regex=true
+ * https://raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/substore/convert.js#full=true&landing=true&loadbalance=true&regex=true
  *
  * Smart 策略 + 正则模式：
- * https://raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/substore/convert.js#smart=true&regex=true
+ * https://raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/substore/convert.js#smart=true&regex=true
  *
  * 启用 QUIC + IPv6：
- * https://raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/substore/convert.js#quic=true&ipv6=true
+ * https://raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/substore/convert.js#quic=true&ipv6=true
  *
  * 台湾／新加坡 IX 手动选择 + 分国落地：
- * https://raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/substore/convert.js#akcdnfallback=true&landing=true
+ * https://raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/substore/convert.js#akcdnfallback=true&landing=true
  *
  * ==================== 导出接口 ====================
  *
@@ -75,7 +75,7 @@
  * - main(config): 主入口，接收代理配置返回完整配置；生成失败时直接抛错
  * - metadata: { rules, ruleProviders, countryRegex } 元数据对象
  *
- * 被 sync-drjcustomrule-3.js 和 build-configs.js 依赖
+ * 被 build-ini.js 和 build-configs.js 依赖
  */
 
 // ======================== 运行参数 ========================
@@ -216,31 +216,31 @@ function mrsProvider(name, hostPath) {
 const ruleProviders = {
   outlook: mrsProvider(
     'outlook',
-    'raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/rulesets/mrs/outlook.mrs'
+    'raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/rulesets/mrs/outlook.mrs'
   ),
   pt: mrsProvider(
     'pt',
-    'raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/rulesets/mrs/pt.mrs'
+    'raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/rulesets/mrs/pt.mrs'
   ),
   crypto: mrsProvider(
     'crypto',
-    'raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/rulesets/mrs/crypto.mrs'
+    'raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/rulesets/mrs/crypto.mrs'
   ),
   mining: mrsProvider(
     'mining',
-    'raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/rulesets/mrs/mining.mrs'
+    'raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/rulesets/mrs/mining.mrs'
   ),
   forceproxy: mrsProvider(
     'forceproxy',
-    'raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/rulesets/mrs/forceproxy.mrs'
+    'raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/rulesets/mrs/forceproxy.mrs'
   ),
   ai: mrsProvider(
     'ai',
-    'raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/rulesets/mrs/ai.mrs'
+    'raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/rulesets/mrs/ai.mrs'
   ),
   forcedirect: mrsProvider(
     'forcedirect',
-    'raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/rulesets/mrs/forcedirect.mrs'
+    'raw.githubusercontent.com/akaDRJ/preset-kit/master/dist/rulesets/mrs/forcedirect.mrs'
   ),
   fakeipfilter: mrsProvider(
     'fakeipfilter',
