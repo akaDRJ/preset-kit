@@ -89,11 +89,17 @@ test('repository separates source, generated output, and legacy code', () => {
 test('readme documents the current public dist layout', () => {
   const readme = fs.readFileSync(path.join(repoRoot, 'README.md'), 'utf8');
 
-  assert.match(readme, /src\/\s+substore\//);
-  assert.match(readme, /dist\/\s+substore\//);
-  assert.match(readme, /dist\/configs\/config\.yaml/);
+  const raw = 'https://raw.githubusercontent.com/akaDRJ/ClashCustomRule/master/dist/';
+  for (const file of [
+    'substore/convert.js', 'substore/rename.js', 'configs/config.yaml',
+    'configs/config_substore.yaml', 'configs/DRJCustomRule_3.0.ini'
+  ]) {
+    assert.ok(readme.includes(`(${raw}${file})`), file);
+  }
+  for (const dir of ['src/', 'dist/rulesets/yaml/', 'dist/rulesets/mrs/']) {
+    assert.ok(readme.includes(`(${dir})`), dir);
+  }
   assert.doesNotMatch(readme, /convert-akcdn-fallback\.js/);
-  assert.match(readme, /dist\/rulesets\/mrs\/<name>\.mrs/);
   assert.doesNotMatch(readme, /master\/convert\.js/);
   assert.doesNotMatch(readme, /master\/rename\.js/);
 });
