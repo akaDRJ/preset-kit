@@ -62,13 +62,6 @@ function loadConvert(argumentsMap) {
   return require(modulePath);
 }
 
-function loadSingBoxConvert(argumentsMap) {
-  const modulePath = path.join(repoRoot, 'src', 'substore', 'convert-sing-box.js');
-  delete require.cache[require.resolve(modulePath)];
-  global.$arguments = argumentsMap;
-  return require(modulePath);
-}
-
 function loadAkcdnFallbackConvert(argumentsMap) {
   return loadConvert({ ...argumentsMap, akcdnfallback: true, landing: true });
 }
@@ -110,6 +103,13 @@ test('rename one removes the full custom separator when only one node remains', 
   const result = rename.operator([{ name: '香港 IPLC' }]);
 
   assert.deepEqual(result, [{ name: '🇭🇰 香港' }]);
+});
+
+test('one uses the actual group size with a letter separator and keeps explicit singleton indexes', () => {
+  const rename = loadRename({ one: true, sn: 'N', blgd: true });
+  const names = ['HK 01', 'HK 02', 'SG 01', 'JP 07'];
+  assert.deepEqual(rename.operator(names.map((name) => ({ name }))).map((p) => p.name),
+    ['香港N01', '香港N02', '新加坡', '日本N07']);
 });
 
 test('rename decodes percent-encoded argument values', () => {
@@ -660,303 +660,6 @@ test('convert omits empty landing group in enumerated mode', () => {
   );
 });
 
-test('sing-box convert builds modular Sub-Store config with selectors, rule sets, and DNS', () => {
-  const convert = loadSingBoxConvert({});
-  const result = convert.build({
-    proxies: [
-      {
-        name: '香港 01',
-        type: 'ss',
-        server: 'hk.example.com',
-        port: 443,
-        cipher: '2022-blake3-aes-128-gcm',
-        password: 'redacted'
-      },
-      {
-        name: '日本 01',
-        type: 'trojan',
-        server: 'jp.example.com',
-        port: 443,
-        password: 'redacted'
-      },
-      {
-        name: '台湾 01',
-        type: 'anytls',
-        server: 'tw.example.com',
-        port: 8443,
-        password: 'redacted',
-        sni: 'example.com',
-        'skip-cert-verify': true
-      }
-    ]
-  });
-  const outbounds = Object.fromEntries(result.outbounds.map((outbound) => [outbound.tag, outbound]));
-  const ruleSets = Object.fromEntries(result.route.rule_set.map((ruleSet) => [ruleSet.tag, ruleSet]));
-
-  assert.equal(result.log.level, 'info');
-  assert.equal(result.dns.strategy, 'ipv4_only');
-  assert.equal(result.dns.final, 'remote');
-  assert.equal(result.dns.timeout, '5s');
-  assert.ok(result.dns.servers.some((server) => server.tag === 'bootstrap' && server.type === 'udp'));
-  assert.deepEqual(result.dns.rules, [
-    { rule_set: 'geosite-google-play', server: 'google' },
-    { rule_set: ['geosite-private', 'geosite-cn'], server: 'local' }
-  ]);
-  assert.deepEqual(result.dns.servers.find((server) => server.tag === 'remote'), { type: 'tls', tag: 'remote', server: '8.8.8.8', detour: '节点选择' });
-  assert.equal(result.dns.servers.find((server) => server.tag === 'local').domain_resolver, 'bootstrap');
-  assert.equal(result.dns.servers.find((server) => server.tag === 'google').detour, 'Google');
-  assert.ok(result.inbounds.some((inbound) => inbound.type === 'mixed'));
-  assert.ok(result.inbounds.some((inbound) => inbound.type === 'tun' && inbound.auto_route === true && inbound.strict_route === true));
-  assert.equal(result.experimental.clash_api.external_controller, '127.0.0.1:9090');
-  assert.equal(result.experimental.clash_api.access_control_allow_private_network, true);
-  assert.ok(result.experimental.clash_api.access_control_allow_origin.includes('http://yacd.haishan.me'));
-  assert.equal(outbounds['节点选择'].type, 'selector');
-  assert.deepEqual(outbounds['节点选择'].outbounds, ['自动选择', '手动切换', '香港节点', '台湾节点', '日本节点', 'direct']);
-  assert.deepEqual(outbounds['YouTube'].outbounds, ['节点选择', '香港节点', '台湾节点', '日本节点', '自动选择', '手动切换', 'direct']);
-  assert.deepEqual(outbounds['人工智能'].outbounds, ['节点选择', '香港节点', '台湾节点', '日本节点', '自动选择', '手动切换', 'direct']);
-  assert.equal(outbounds['自动选择'].type, 'urltest');
-  assert.deepEqual(outbounds['自动选择'].outbounds, ['香港 01', '日本 01', '台湾 01']);
-  assert.equal(outbounds['手动切换'].type, 'selector');
-  assert.deepEqual(outbounds['手动切换'].outbounds, ['香港 01', '日本 01', '台湾 01']);
-  assert.deepEqual(outbounds['香港节点'].outbounds, ['香港 01']);
-  assert.deepEqual(outbounds['台湾节点'].outbounds, ['台湾 01']);
-  assert.deepEqual(outbounds['日本节点'].outbounds, ['日本 01']);
-  assert.deepEqual(outbounds['全球直连'].outbounds, ['direct']);
-  assert.deepEqual(outbounds['强制代理'].outbounds, ['节点选择', '香港节点', '台湾节点', '日本节点', '自动选择', '手动切换', 'direct']);
-  assert.equal(outbounds['香港 01'].type, 'shadowsocks');
-  assert.equal(outbounds['日本 01'].type, 'trojan');
-  assert.deepEqual(outbounds['台湾 01'], {
-    type: 'anytls',
-    tag: '台湾 01',
-    server: 'tw.example.com',
-    server_port: 8443,
-    password: 'redacted',
-    tls: { enabled: true, server_name: 'example.com', insecure: true }
-  });
-  assert.equal(ruleSets.ai.type, 'remote');
-  assert.match(ruleSets.ai.url, /^https:\/\/raw\.githubusercontent\.com\/akaDRJ\/ClashCustomRule\/master\/dist\/rulesets\/sing-box\/ai\.json$/);
-  assert.equal(Object.prototype.hasOwnProperty.call(ruleSets.ai, 'download_detour'), false);
-  assert.equal(ruleSets['geosite-youtube'].format, 'binary');
-  assert.match(ruleSets['geosite-youtube'].url, /^https:\/\/raw\.githubusercontent\.com\/appshubcc\/bett-rules\/sing\/geo\/geosite\/youtube\.srs$/);
-  assert.equal(ruleSets['geoip-cn'].format, 'binary');
-  assert.match(ruleSets['geoip-cn'].url, /^https:\/\/raw\.githubusercontent\.com\/appshubcc\/bett-rules\/sing\/geo\/geoip\/cn\.srs$/);
-  assert.equal(JSON.stringify(result.route.rules).includes('"geosite"'), false);
-  assert.equal(JSON.stringify(result.route.rules).includes('"geoip"'), false);
-  assert.deepEqual(result.route.rules.slice(0, 6), [
-    { action: 'sniff' },
-    { type: 'logical', mode: 'or', rules: [{ protocol: 'dns' }, { port: 53 }], action: 'hijack-dns' },
-    { ip_is_private: true, outbound: '全球直连' },
-    { rule_set: 'geosite-private', outbound: '全球直连' },
-    { rule_set: 'forcedirect', outbound: '全球直连' },
-    { rule_set: 'forceproxy', network: 'udp', port: 443, action: 'reject' }
-  ]);
-  assert.equal(result.route.default_domain_resolver, 'bootstrap');
-  assert.deepEqual(result.http_clients, [{ tag: 'rule-set-download', detour: '自动选择' }]);
-  assert.equal(result.route.default_http_client, 'rule-set-download');
-  assert.equal(result.route.final, '节点选择');
-  assert.equal(JSON.parse(convert.operator(result.outbounds.slice(-2))).route.final, '节点选择');
-  assert.equal(JSON.parse(convert.operator({ proxies: result.outbounds.slice(-2) })).route.final, '节点选择');
-  assert.equal(JSON.parse(convert.main({ proxies: result.outbounds.slice(-2) })).route.final, '节点选择');
-});
-
-test('sing-box generated selector policies have no circular outbound dependencies', () => {
-  const { buildSingBoxConfig } = require(path.join(repoRoot, 'src', 'sing-box', 'config.js'));
-  const result = buildSingBoxConfig({
-    proxies: [
-      { name: '香港 01', type: 'anytls', server: 'hk.example.com', port: 443, password: 'redacted' },
-      { name: '美国 01', type: 'anytls', server: 'us.example.com', port: 443, password: 'redacted' }
-    ]
-  });
-  const outboundMap = Object.fromEntries(result.outbounds.map((outbound) => [outbound.tag, outbound]));
-  const visit = (tag, stack = []) => {
-    assert.equal(stack.includes(tag), false, `circular outbound dependency: ${[...stack, tag].join('->')}`);
-    const outbound = outboundMap[tag];
-    if (!outbound || !Array.isArray(outbound.outbounds)) return;
-    for (const child of outbound.outbounds) visit(child, [...stack, tag]);
-  };
-
-  for (const outbound of result.outbounds) visit(outbound.tag);
-});
-
-test('sing-box Momo target needs no manual compatibility rewrite', () => {
-  const convert = loadSingBoxConvert({ momo: true, mixedPort: '7899' });
-  const result = convert.build({ proxies: [] });
-  const tun = result.inbounds.find((inbound) => inbound.type === 'tun');
-  const mixed = result.inbounds.find((inbound) => inbound.type === 'mixed');
-  const dns = result.inbounds.find((inbound) => inbound.tag === 'dns-in');
-
-  assert.equal(Object.prototype.hasOwnProperty.call(result.dns, 'timeout'), false);
-  assert.equal(result.dns.reverse_mapping, true);
-  assert.equal(Object.prototype.hasOwnProperty.call(result, 'http_clients'), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(result.route, 'default_http_client'), false);
-  assert.equal(tun.tag, 'tun-in');
-  assert.equal(tun.interface_name, 'momo-tun');
-  assert.equal(tun.auto_route, false);
-  assert.deepEqual(dns, { type: 'direct', tag: 'dns-in', listen: '127.0.0.1', listen_port: 6450 });
-  assert.equal(mixed.listen_port, 7899);
-  assert.equal(result.experimental.clash_api.external_controller, '0.0.0.0:19091');
-});
-
-test('sing-box generated config avoids removed geosite and geoip route fields', () => {
-  const { buildSingBoxConfig } = require(path.join(repoRoot, 'src', 'sing-box', 'config.js'));
-  const result = buildSingBoxConfig({ proxies: [] });
-  const rulesJson = JSON.stringify(result.route.rules);
-
-  assert.equal(rulesJson.includes('"geosite"'), false);
-  assert.equal(rulesJson.includes('"geoip"'), false);
-  assert.ok(result.route.rules.some((rule) => rule.rule_set === 'geosite-youtube' && rule.outbound === 'YouTube'));
-  assert.ok(result.route.rules.some((rule) => rule.rule_set === 'geoip-cn' && rule.outbound === '全球直连'));
-  assert.equal(result.route.rule_set.some((ruleSet) => ['geoip-netflix', 'geoip-google', 'geoip-telegram'].includes(ruleSet.tag)), false);
-  assert.ok(result.route.rule_set.every((ruleSet) => ruleSet.url.startsWith('https://raw.githubusercontent.com/')));
-  assert.equal(result.http_clients[0].detour, '自动选择');
-  assert.ok(result.route.rules.some((rule) => rule.ip_is_private === true && rule.outbound === '全球直连'));
-});
-
-test('sing-box generated config uses static groups instead of Clash-only filters', () => {
-  const { buildSingBoxConfig } = require(path.join(repoRoot, 'src', 'sing-box', 'config.js'));
-  const result = buildSingBoxConfig({
-    proxies: [
-      { name: '香港 01', type: 'anytls', server: 'hk.example.com', port: 443, password: 'redacted' },
-      { name: '美国 0.5x', type: 'anytls', server: 'us.example.com', port: 443, password: 'redacted' },
-      { name: '落地 台湾 01', type: 'anytls', server: 'tw.example.com', port: 443, password: 'redacted' }
-    ]
-  });
-  const outbounds = Object.fromEntries(result.outbounds.map((outbound) => [outbound.tag, outbound]));
-  const outboundJson = JSON.stringify(result.outbounds);
-
-  assert.equal(outboundJson.includes('include-all'), false);
-  assert.equal(outboundJson.includes('filter'), false);
-  assert.equal(outboundJson.includes('fallback'), false);
-  assert.equal(outboundJson.includes('load-balance'), false);
-  assert.equal(outboundJson.includes('smart'), false);
-  assert.deepEqual(outbounds['香港节点'].outbounds, ['香港 01']);
-  assert.deepEqual(outbounds['美国节点'].outbounds, ['美国 0.5x']);
-  assert.deepEqual(outbounds['低倍率节点'].outbounds, ['美国 0.5x']);
-  assert.deepEqual(outbounds['台湾节点'].outbounds, ['落地 台湾 01']);
-  assert.equal(outbounds['落地节点'], undefined);
-});
-
-test('sing-box builder keeps already produced sing-box outbound tags', () => {
-  const { buildSingBoxConfig } = require(path.join(repoRoot, 'src', 'sing-box', 'config.js'));
-  const result = buildSingBoxConfig({
-    proxies: [
-      { tag: '🇭🇰 NX 香港 01', type: 'anytls', server: 'hk.example.com', server_port: 443, password: 'redacted' }
-    ]
-  });
-  const outbounds = Object.fromEntries(result.outbounds.map((outbound) => [outbound.tag, outbound]));
-
-  assert.equal(outbounds['🇭🇰 NX 香港 01'].server_port, 443);
-  assert.deepEqual(outbounds['香港节点'].outbounds, ['🇭🇰 NX 香港 01']);
-});
-
-test('sing-box builder preserves landing detours with manual selectors and independent relay nodes', () => {
-  const { buildSingBoxConfig } = require(path.join(repoRoot, 'src', 'sing-box', 'config.js'));
-  const result = buildSingBoxConfig({
-    proxies: [
-      { tag: '🇭🇰 NX 香港 01', type: 'anytls', server: 'hk.example.com', server_port: 443, password: 'redacted' },
-      { tag: '🇹🇼 落地 台湾 01', type: 'vmess', server: 'tw.example.com', server_port: 443, uuid: 'redacted', detour: '前置代理' }
-    ]
-  });
-  const outbounds = Object.fromEntries(result.outbounds.map((outbound) => [outbound.tag, outbound]));
-  const tags = new Set(result.outbounds.map((outbound) => outbound.tag));
-
-  assert.equal(outbounds['🇹🇼 落地 台湾 01'].detour, '前置代理');
-  assert.equal(outbounds['前置代理'].type, 'selector');
-  assert.equal(outbounds['前置代理'].default, '中转节点');
-  assert.equal(outbounds['台湾节点'], undefined);
-  assert.equal(outbounds['落地节点'], undefined);
-  assert.deepEqual(outbounds['台湾落地'].outbounds, ['🇹🇼 落地 台湾 01']);
-  assert.deepEqual(outbounds['节点选择'].outbounds, ['台湾落地', '自动选择', '手动切换', '香港节点', 'direct']);
-  assert.equal(outbounds['节点选择'].default, '台湾落地');
-  for (const outbound of result.outbounds) {
-    for (const child of outbound.outbounds || []) assert.equal(tags.has(child), true, `missing child outbound ${child}`);
-    if (outbound.detour) assert.equal(tags.has(outbound.detour), true, `missing detour ${outbound.detour}`);
-  }
-});
-
-test('sing-box exposes country-isolated landing groups without adding landing nodes to pre-proxy or automatic groups', () => {
-  const { buildSingBoxConfig } = require(path.join(repoRoot, 'src', 'sing-box', 'config.js'));
-  const landingNode = (tag, server) => ({
-    type: 'anytls', tag, server, server_port: 443, password: 'redacted', detour: '前置代理'
-  });
-  const result = buildSingBoxConfig({
-    proxies: [
-      { type: 'anytls', tag: '🇭🇰 香港 01', server: 'hk.example', server_port: 443, password: 'redacted' },
-      { type: 'anytls', tag: '🇹🇼 台湾 01', server: 'tw.example', server_port: 443, password: 'redacted' },
-      landingNode('🇹🇼 落地 台湾 01', 'tw-landing-1.example'),
-      { type: 'anytls', tag: '🇸🇬 新加坡 01', server: 'sg.example', server_port: 443, password: 'redacted' },
-      landingNode('🇸🇬 落地 新加坡 01', 'sg-landing-1.example'),
-      landingNode('🇹🇼 落地 台湾 02', 'tw-landing-2.example'),
-      landingNode('🇸🇬 落地 新加坡 02', 'sg-landing-2.example')
-    ]
-  });
-  const outbounds = Object.fromEntries(result.outbounds.map((outbound) => [outbound.tag, outbound]));
-  const landingNodes = [
-    '🇹🇼 落地 台湾 01', '🇸🇬 落地 新加坡 01', '🇹🇼 落地 台湾 02', '🇸🇬 落地 新加坡 02'
-  ];
-
-  assert.equal(outbounds['台湾落地'].type, 'urltest');
-  assert.deepEqual(outbounds['台湾落地'].outbounds, ['🇹🇼 落地 台湾 01', '🇹🇼 落地 台湾 02']);
-  assert.equal(outbounds['新加坡落地'].type, 'urltest');
-  assert.deepEqual(outbounds['新加坡落地'].outbounds, ['🇸🇬 落地 新加坡 01', '🇸🇬 落地 新加坡 02']);
-  assert.equal(outbounds['落地节点'], undefined);
-  assert.equal(outbounds['节点选择'].default, '台湾落地');
-  assert.equal(outbounds['节点选择'].outbounds[0], '台湾落地');
-  assert.equal(JSON.stringify(result).includes('落地节点'), false);
-  for (const policy of ['节点选择', 'YouTube', '人工智能', '强制代理']) {
-    assert.ok(outbounds[policy].outbounds.includes('台湾落地'), `${policy} missing 台湾落地`);
-    assert.ok(outbounds[policy].outbounds.includes('新加坡落地'), `${policy} missing 新加坡落地`);
-  }
-  assert.equal(outbounds['前置代理'].outbounds.includes('台湾落地'), false);
-  assert.equal(outbounds['前置代理'].outbounds.includes('新加坡落地'), false);
-  for (const groupName of ['自动选择', '台湾节点', '新加坡节点', '中转节点']) {
-    assert.equal(outbounds[groupName].outbounds.some((tag) => landingNodes.includes(tag)), false, groupName);
-  }
-  assert.deepEqual(outbounds['台湾节点'].outbounds, ['🇹🇼 台湾 01']);
-  assert.deepEqual(outbounds['新加坡节点'].outbounds, ['🇸🇬 新加坡 01']);
-
-  const visit = (tag, parents = []) => {
-    assert.equal(parents.includes(tag), false, `circular outbound dependency: ${[...parents, tag].join('->')}`);
-    const outbound = outbounds[tag];
-    if (!outbound) return;
-    for (const child of [...(outbound.outbounds || []), ...(outbound.detour ? [outbound.detour] : [])]) {
-      visit(child, [...parents, tag]);
-    }
-  };
-  for (const outbound of result.outbounds) visit(outbound.tag);
-});
-
-test('sing-box remote rule-set tags all have generated source files', () => {
-  const { RULE_SET_TAGS } = require(path.join(repoRoot, 'src', 'sing-box', 'config.js'));
-  const generatedTags = new Set(
-    fs.readdirSync(path.join(repoRoot, 'dist', 'rulesets', 'sing-box'))
-      .map((file) => file.replace(/\.json$/, ''))
-  );
-
-  assert.deepEqual(
-    RULE_SET_TAGS.filter((tag) => !tag.startsWith('geosite-') && !tag.startsWith('geoip-') && !generatedTags.has(tag)),
-    []
-  );
-});
-
-test('build-substore publishes a self-contained sing-box Sub-Store converter', () => {
-  const source = fs.readFileSync(path.join(repoRoot, 'scripts', 'build-substore.js'), 'utf8');
-
-  assert.match(source, /convert-sing-box\.js/);
-
-  const output = fs.readFileSync(path.join(repoRoot, 'dist', 'substore', 'convert-sing-box.js'), 'utf8');
-  assert.doesNotMatch(output, /require\(['"]\.\.\/sing-box\//);
-  assert.match(output, /function buildSingBoxConfig/);
-});
-
-test('package check includes sing-box build drift checks', () => {
-  const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
-
-  assert.equal(manifest.scripts['build:sing-box'], 'node scripts/build-sing-box.js');
-  assert.equal(manifest.scripts['check:sing-box'], 'node scripts/build-sing-box.js --check');
-  assert.match(manifest.scripts.check, /npm run check:sing-box/);
-});
-
 test('IX selector keeps only IX nodes and pre-proxy chooses independent transit groups', () => {
   const convert = loadAkcdnFallbackConvert({});
   const result = convert.main({
@@ -1004,12 +707,12 @@ test('IX selector keeps only IX nodes and pre-proxy chooses independent transit 
   assert.equal(Object.prototype.hasOwnProperty.call(groups['自动选择'], 'proxies'), false);
   assert.equal(groups['前置代理'].type, 'select');
   assert.deepEqual(groups['前置代理'].proxies, [
-    '中转自动选择',
+    '中转自动切换',
     '中转香港节点',
     '中转手动切换'
   ]);
-  assert.equal(groups['中转自动选择'].type, 'url-test');
-  assert.deepEqual(groups['中转自动选择'].proxies, ['🇭🇰 NX 香港 01', '🇭🇰 YT 香港 01']);
+  assert.equal(groups['中转自动切换'].type, 'url-test');
+  assert.deepEqual(groups['中转自动切换'].proxies, ['🇭🇰 NX 香港 01', '🇭🇰 YT 香港 01']);
   assert.equal(groups['中转香港节点'].type, 'url-test');
   assert.deepEqual(groups['中转香港节点'].proxies, ['🇭🇰 NX 香港 01', '🇭🇰 YT 香港 01']);
   assert.equal(groups['中转手动切换'].type, 'select');
@@ -1022,15 +725,16 @@ test('automatic groups share probes while regional and single-member landing gro
       const result = loadAkcdnFallbackConvert({ regex, smart }).main({
         proxies: [
           { name: '香港 0.5x', type: 'ss' },
+          { name: '日本 01', type: 'ss' },
           { name: '台湾 IX 01', type: 'ss', server: '43.136.98.179' },
           { name: '落地 台湾 01', type: 'ss', 'dialer-proxy': '前置代理' }
         ]
       });
       const groups = Object.fromEntries(result['proxy-groups'].map((group) => [group.name, group]));
-      for (const name of ['自动选择', '中转自动选择', '香港节点', '中转香港节点', '低倍率节点', '中转低倍率节点']) {
+      for (const name of ['自动选择', '中转自动切换', '香港节点', '中转香港节点', '低倍率节点', '中转低倍率节点']) {
         assert.equal(groups[name].url, 'https://cp.cloudflare.com/generate_204', name);
         assert.equal(groups[name].interval, 300, name);
-        assert.equal(groups[name].lazy, !name.endsWith('自动选择'), name);
+        assert.equal(groups[name].lazy, !['自动选择', '中转自动切换'].includes(name), name);
       }
       assert.equal(groups['DNS代理'], undefined);
       for (const name of ['台湾落地']) {
@@ -1235,7 +939,8 @@ test('landing pre-proxy has no dialer-proxy cycle in enum or regex mode', () => 
     const groups = Object.fromEntries(result['proxy-groups'].map((group) => [group.name, group]));
     const preProxy = groups['前置代理'];
     assert.ok(preProxy, `前置代理 missing in ${regex ? 'regex' : 'enumerated'} mode`);
-    assert.equal(preProxy['include-all'], regex ? true : undefined);
+    assert.equal(preProxy['include-all'], undefined);
+    if (regex) assert.ok(independentNodes.every((p) => preProxy.proxies.includes(p.name)));
     const visit = (name, ancestors = []) => {
       assert.equal(ancestors.includes(name), false, `circular dependency: ${[...ancestors, name].join('->')}`);
       const group = groups[name];

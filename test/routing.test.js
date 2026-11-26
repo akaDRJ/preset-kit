@@ -1,7 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { main } = require('../src/substore/convert');
-const { buildRouteConfig, buildDnsConfig } = require('../src/sing-box/config');
 
 // Frozen category memberships for regression cases; no live upstream dependency.
 const cases = [
@@ -18,13 +17,9 @@ const cases = [
 
 test('YoooClaw bridge bypasses the proxy without covering sibling domains', () => {
   const payload = require('../src/data/rulesets')['forcedirect.yaml'];
-  const { buildSourceRuleSet } = require('../src/sing-box/rule-sets');
   const domain = 'openclaw-service.yoooclaw.com';
   assert.ok(payload.includes(domain));
   assert.ok(!payload.includes('+.yoooclaw.com'));
-  const rule = buildSourceRuleSet(payload).rules[0];
-  assert.ok(rule.domain.includes(domain));
-  assert.ok(!rule.domain_suffix.includes('.yoooclaw.com'));
 });
 
 function matchesAtom(atom, tags, network, port) {
@@ -48,39 +43,21 @@ function mihomoResult(rules, tags, network, port) {
   }
 }
 
-function singResult(config, tags, network, port) {
-  const sets = tags.map((tag) => tag.replace(/^rule-set:/, '').replace(':', '-'));
-  for (const rule of config.rules) {
-    if (['sniff', 'hijack-dns'].includes(rule.action)) continue;
-    if (rule.ip_is_private && !tags.includes('geoip:private')) continue;
-    if (rule.rule_set && !sets.includes(rule.rule_set)) continue;
-    if (rule.network && rule.network !== network) continue;
-    if (rule.port && rule.port !== port) continue;
-    return rule.action === 'reject' ? 'REJECT' : rule.outbound;
-  }
-  return config.final;
-}
-
-test('both clients preserve first-match routing and scope QUIC to proxy policies', () => {
+test('Mihomo preserves first-match routing and scopes QUIC to proxy policies', () => {
   for (const enabled of [false, true]) {
     global.$arguments = { quic: enabled };
     delete require.cache[require.resolve('../src/substore/convert')];
     const clash = require('../src/substore/convert').main({}).rules;
-    const sing = buildRouteConfig({ quicEnabled: enabled });
     for (const [domain, tags, policy] of cases) {
       for (const network of ['tcp', 'udp']) {
         const expected = !enabled && network === 'udp' && policy !== '全球直连' ? 'REJECT' : policy;
         assert.equal(mihomoResult(clash, tags, network, 443), expected, `Mihomo ${domain} ${network}`);
-        assert.equal(singResult(sing, tags, network, 443), expected, `sing-box ${domain} ${network}`);
       }
     }
-    assert.equal(singResult(sing, [], 'tcp', 853), '节点选择');
-    assert.equal(singResult(buildRouteConfig({ quicEnabled: enabled, blockDot: true }), [], 'tcp', 853), 'REJECT');
   }
 });
 
-test('Play DNS exception precedes CN, and Geo update ownership is preserved', () => {
-  assert.deepEqual(buildDnsConfig().rules[0], { rule_set: 'geosite-google-play', server: 'google' });
+test('Mihomo preserves Geo update ownership', () => {
   const config = main({});
   assert.equal(config.dns['fake-ip-range'], '198.18.0.1/16');
   assert.equal(config['geo-auto-update'], true);

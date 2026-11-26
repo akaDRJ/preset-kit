@@ -19,7 +19,7 @@
  *
  * [landing]        启用落地节点支持
  *                  按国家添加「台湾落地」「新加坡落地」等分组（匹配 ISP／落地关键词）
- *                  添加「前置代理」分组（自动选择排除 ISP 的节点）
+ *                  前置代理排除该落地地区的自建节点；不同候选集按地区分组
  *
  * [ipv6]           启用 IPv6 支持（默认关闭）
  *                  影响 DNS 配置和全局 ipv6 开关
@@ -480,7 +480,7 @@ function proxyServerKey(proxy) {
 function isTransitNode(proxy, landingServerKeys) {
   if (!proxy || !proxy.name) return false;
   if (proxy['dialer-proxy']) return false;
-  if (proxy.type === 'direct') return false;
+  if (proxy.type === 'direct' || proxy.type === 'reject') return false;
   if (isIspName(proxy.name) || isAkcdnNode(proxy)) return false;
   const serverKey = proxyServerKey(proxy);
   return !serverKey || !landingServerKeys.has(serverKey);
@@ -609,13 +609,7 @@ function appendUnique(arr, values) {
 }
 
 function uniqueStrings(values) {
-  const result = [];
-  for (const value of values) {
-    if (typeof value === 'string' && value && !result.includes(value)) {
-      result.push(value);
-    }
-  }
-  return result;
+  return [...new Set(values.filter((value) => typeof value === 'string' && value))];
 }
 
 function proxyNameExcludePattern(proxies, excludeProxy = (proxy) => proxy['dialer-proxy']) {
@@ -654,7 +648,7 @@ function buildTransitCountryProxyGroups(countryList, transitNodes) {
     const regex = COUNTRY_REGEX_MAP.get(country);
     if (!regex) continue;
 
-    const nodes = uniqueStrings(transitNodes.filter((name) => regex.test(name)));
+    const nodes = transitNodes.filter((name) => regex.test(name));
     if (!nodes.length) continue;
 
     const group = {
@@ -674,21 +668,23 @@ function buildTransitCountryProxyGroups(countryList, transitNodes) {
   return groups;
 }
 
-function buildTransitProxyGroups(countryList, transitNodes) {
-  const uniqueTransitNodes = uniqueStrings(transitNodes);
-  const transitCountryGroups = buildTransitCountryProxyGroups(countryList, uniqueTransitNodes);
-  const lowCostTransitNodes = uniqueStrings(uniqueTransitNodes.filter(isLowCostName));
+function buildTransitSwitchGroups(nodes, regionalGroups = []) {
+  if (!nodes.length) return [];
+  const groups = [];
+  if (nodes.length > 1) groups.push({
+    name: '中转自动切换', icon: ICON('common/Auto.svg'), type: autoGroupType(),
+    proxies: [...nodes], ...timedAutoGroupFields()
+  });
+  groups.push(...regionalGroups, {
+    name: '中转手动切换', icon: ICON('common/Available.svg'),
+    type: 'select', proxies: [...nodes]
+  });
+  return groups;
+}
 
-  const groups = [
-    {
-      name: '中转自动选择',
-      icon: ICON('common/Auto.svg'),
-      type: autoGroupType(),
-      proxies: [...uniqueTransitNodes],
-      ...timedAutoGroupFields()
-    },
-    ...transitCountryGroups
-  ];
+function buildTransitProxyGroups(countryList, transitNodes) {
+  const transitCountryGroups = buildTransitCountryProxyGroups(countryList, transitNodes);
+  const lowCostTransitNodes = transitNodes.filter(isLowCostName);
 
   if (lowCostTransitNodes.length) {
     const lowCostGroup = {
@@ -700,17 +696,108 @@ function buildTransitProxyGroups(countryList, transitNodes) {
     if (!options.loadBalance) {
       Object.assign(lowCostGroup, timedAutoGroupFields(true));
     }
-    groups.push(lowCostGroup);
+    transitCountryGroups.push(lowCostGroup);
   }
 
-  groups.push({
-    name: '中转手动切换',
-    icon: ICON('common/Available.svg'),
-    type: 'select',
-    proxies: [...uniqueTransitNodes]
-  });
+  return buildTransitSwitchGroups(transitNodes, transitCountryGroups);
+}
 
-  return groups;
+function matchingProxyNames(group, proxies) {
+  const include = makeRegex(group.filter);
+  const exclude = group['exclude-filter'] && makeRegex(group['exclude-filter']);
+  return proxies.filter((p) => include.test(p.name) && !(exclude && exclude.test(p.name))).map((p) => p.name);
+}
+
+// A dialer selects a group by name; one shared selector cannot depend on which
+// landing invoked it. Split only the landings that need a different relay pool.
+function buildFrontGroups({
+  proxies, countryList, countryProxyGroups, selfHostedCountryProxyGroups, transitNodes,
+  hasAkcdnFallbackGroup, dialerProxyExcludePattern, lowCostNodes,
+  hasProviders, dialerOverrides
+}) {
+  const ordinaryByTransitName = new Map(countryProxyGroups.map((g) => [`中转${g.name}`, g]));
+  const owned = new Map(selfHostedCountryProxyGroups.map((group) => [group.name, group.proxies]));
+  const proxyNames = new Set(proxies.map((p) => p.name));
+  const scopes = new Map();
+  for (const proxy of proxies) {
+    if (!proxy['dialer-proxy']) continue;
+    const country = COUNTRY_ENTRIES.find(({ regex }) => regex.test(proxy.name))?.country;
+    if (proxy['dialer-proxy'] !== '前置代理' &&
+        !(country && proxy['dialer-proxy'] === `${country}前置代理` && !proxyNames.has(proxy['dialer-proxy']))) continue;
+    const scope = owned.has(`${country}自建`) ? country : '';
+    if (!scopes.has(scope)) scopes.set(scope, []);
+    scopes.get(scope).push(proxy);
+  }
+
+  const result = [];
+  const providerTemplate = !scopes.size && options.regexFilter && hasProviders && !hasAkcdnFallbackGroup;
+  if (!scopes.size) scopes.set('', []);
+  const globalAutoExclude = makeRegex(addExcludePattern(ISP_EXCLUDE_PATTERN, dialerProxyExcludePattern));
+  const globalAutoMembers = proxies.filter((p) => !globalAutoExclude.test(p.name));
+  const ordinaryLowCost = {
+    name: '低倍率节点',
+    ...(options.regexFilter ? {
+      'include-all': true, filter: LOW_COST_PATTERN, 'exclude-filter': dialerProxyExcludePattern
+    } : { proxies: lowCostNodes })
+  };
+  for (const [country, landings] of scopes) {
+    const prefix = scopes.size > 1 ? country : '';
+    const front = `${prefix}前置代理`;
+    const forbidden = new Set(owned.get(`${country}自建`) || []);
+    const eligible = new Set(transitNodes.filter((name) => !forbidden.has(name)));
+    const choices = [];
+    // Reuse the saved global shortcut only when it cannot admit an extra relay.
+    if (providerTemplate || (!country && !hasAkcdnFallbackGroup && !hasProviders &&
+        eligible.size && globalAutoMembers.length === eligible.size &&
+        globalAutoMembers.every((p) => eligible.has(p.name)))) {
+      choices.push('自动选择');
+    }
+    if (eligible.size) {
+      for (const group of buildTransitProxyGroups(countryList, [...eligible])) {
+        // Keep an existing airport-region choice (and its saved selection)
+        // when all of its actual members are safe for this landing.
+        const ordinary = !hasAkcdnFallbackGroup && (
+          !country && group.name === '中转低倍率节点' ? ordinaryLowCost : ordinaryByTransitName.get(group.name)
+        );
+        if (ordinary && (!ordinary['include-all'] || !hasProviders)) {
+          const members = ordinary.proxies || matchingProxyNames(ordinary, proxies);
+          if (members.length && members.every((name) => eligible.has(name))) {
+            choices.push(ordinary.name);
+            continue;
+          }
+        }
+        group.name = prefix ? `${prefix}落地·${group.name}` : group.name;
+        choices.push(group.name);
+        result.push(group);
+      }
+      if (!hasAkcdnFallbackGroup) {
+        for (const [name, nodes] of owned) {
+          if (nodes.every((node) => eligible.has(node))) choices.push(name);
+        }
+      }
+    }
+    if (providerTemplate) appendUnique(choices, [...countryProxyGroups.map((g) => g.name), '低倍率节点']);
+    if (!hasAkcdnFallbackGroup) choices.push('DIRECT');
+    if (!choices.length) choices.push('REJECT');
+    // Keep the regex-mode node picker, but never re-import ineligible inline nodes.
+    if (options.regexFilter && !country && !hasAkcdnFallbackGroup && !providerTemplate) {
+      choices.push(...eligible);
+    }
+    result.push({
+      name: front, icon: ICON('common/Server.svg'), type: 'select', proxies: choices,
+      ...(providerTemplate ? {
+        'include-all': true,
+        'exclude-filter': addExcludePattern(TRANSIT_EXCLUDE_PATTERN, dialerProxyExcludePattern)
+      } : {})
+    });
+    for (const proxy of landings) {
+      if (proxy['dialer-proxy'] !== front) dialerOverrides.set(proxy.name, front);
+    }
+  }
+  for (const group of result) {
+    if (proxyNames.has(group.name)) throw new Error(`Proxy name conflicts with generated group: ${group.name}`);
+  }
+  return result;
 }
 
 // ======================== 国家解析 ========================
@@ -777,19 +864,11 @@ function regionalAutoGroupType() {
 }
 
 // ========================= 代理组 =========================
-function buildProxyGroups(
-  countryList,
-  countryProxyGroups,
-  lowCostNodes,
-  landingNodes,
-  landingCountryData,
-  selfHostedCountryProxyGroups,
-  akcdnFallbackNodes,
-  transitNodes,
-  defaults,
-  proxies,
-  dialerProxyExcludePattern
-) {
+function buildProxyGroups({
+  countryList, countryProxyGroups, lowCostNodes, landingNodes, landingCountryData,
+  selfHostedCountryProxyGroups, akcdnFallbackNodes, transitNodes, defaults, proxies,
+  dialerProxyExcludePattern, hasProviders, dialerOverrides
+}) {
   const {
     defaultProxies,
     defaultSelector,
@@ -800,7 +879,7 @@ function buildProxyGroups(
   const hasLowCostGroup = options.regexFilter || lowCostNodes.length > 0;
   const hasAkcdnFallbackGroup = options.akcdnFallback && akcdnFallbackNodes.length > 0;
   const hasLandingGroup =
-    (options.landing || hasAkcdnFallbackGroup) &&
+    (options.landing || options.akcdnFallback) &&
     (options.regexFilter || landingNodes.length > 0);
   const landingCountryProxyGroups = hasLandingGroup
     ? landingCountryData.groups.map(({ country, name, nodes }) => ({
@@ -844,6 +923,12 @@ function buildProxyGroups(
     insertAfter(globalProxies, '自动选择', 'IX节点');
   }
 
+  const frontGroups = hasLandingGroup ? buildFrontGroups({
+    proxies, countryList, countryProxyGroups, selfHostedCountryProxyGroups, transitNodes,
+    hasAkcdnFallbackGroup, dialerProxyExcludePattern, lowCostNodes,
+    hasProviders, dialerOverrides
+  }) : [];
+  const frontNames = frontGroups.filter((group) => group.name.endsWith('前置代理')).map((group) => group.name);
   if (hasLandingGroup) {
     if (!hasAkcdnFallbackGroup && landingCountryGroupNames.length) {
       const defaultLanding = landingCountryGroupNames.includes('台湾落地')
@@ -852,39 +937,15 @@ function buildProxyGroups(
       defaultSelector.splice(defaultSelector.indexOf(defaultLanding), 1);
       defaultSelector.unshift(defaultLanding);
     }
-    insertAfter(globalProxies, '自动选择', '前置代理');
+    insertUniqueAt(globalProxies, globalProxies.indexOf('自动选择') + 1, frontNames);
     insertUniqueAt(
       globalProxies,
-      globalProxies.indexOf(hasAkcdnFallbackGroup ? 'IX节点' : '前置代理') + 1,
+      globalProxies.indexOf(hasAkcdnFallbackGroup ? 'IX节点' : frontNames[frontNames.length - 1]) + 1,
       landingCountryGroupNames
     );
   }
   appendUnique(globalProxies, countryProxies);
 
-  const transitProxyGroups = hasAkcdnFallbackGroup && transitNodes.length
-    ? buildTransitProxyGroups(countryList, transitNodes)
-    : [];
-  const basicPreProxyManualGroup =
-    hasLandingGroup && !hasAkcdnFallbackGroup && transitNodes.length
-      ? {
-          name: '中转手动切换',
-          icon: ICON('common/Available.svg'),
-          type: 'select',
-          proxies: uniqueStrings(transitNodes)
-        }
-      : null;
-  const preProxySelector = transitProxyGroups.length
-    ? transitProxyGroups.map((group) => group.name)
-    : defaultSelector
-        .filter(
-          (name) =>
-            name !== 'IX节点' &&
-            !landingCountryGroupNames.includes(name)
-        )
-        .flatMap((name) => {
-          if (name !== '手动切换') return [name];
-          return basicPreProxyManualGroup ? [basicPreProxyManualGroup.name] : [];
-        });
   const directFallbackProxies = ['节点选择', '手动切换', '全球直连'];
   // Keep existing defaults and pre-proxy choices; promote only the self-hosted shortcuts.
   for (const [list, index] of [
@@ -918,25 +979,7 @@ function buildProxyGroups(
     ...landingCountryProxyGroups,
     ...selfHostedCountryProxyGroups,
 
-    hasLandingGroup
-      ? {
-          name: '前置代理',
-          icon: ICON('common/Server.svg'),
-          type: 'select',
-          ...(hasAkcdnFallbackGroup
-            ? { proxies: [...preProxySelector] }
-            : options.regexFilter
-            ? {
-                'include-all': true,
-                'exclude-filter': addExcludePattern(TRANSIT_EXCLUDE_PATTERN, dialerProxyExcludePattern),
-                proxies: [...preProxySelector]
-              }
-            : { proxies: [...preProxySelector] })
-        }
-      : null,
-
-    ...transitProxyGroups,
-    basicPreProxyManualGroup,
+    ...frontGroups,
 
     hasLowCostGroup
       ? {
@@ -1039,19 +1082,19 @@ function main(config) {
     countryProxyExcludePattern
   );
 
-  const proxyGroups = buildProxyGroups(
-    countryList,
-    countryProxyGroups,
-    lowCostNodes,
-    landingNodes,
-    landingCountryData,
-    selfHostedCountryProxyGroups,
-    akcdnFallbackNodes,
-    transitNodes,
-    { defaultProxies, defaultSelector, defaultProxiesDirect, globalProxies },
-    proxies,
-    dialerProxyExcludePattern
-  );
+  const dialerOverrides = new Map();
+  const proxyGroups = buildProxyGroups({
+    countryList, countryProxyGroups, lowCostNodes, landingNodes, landingCountryData,
+    selfHostedCountryProxyGroups, akcdnFallbackNodes, transitNodes, proxies,
+    defaults: { defaultProxies, defaultSelector, defaultProxiesDirect, globalProxies },
+    dialerProxyExcludePattern, hasProviders: Object.keys(safeConfig['proxy-providers'] || {}).length > 0,
+    dialerOverrides
+  });
+  // Only write back managed dialer references; leave all other input fields intact.
+  if (dialerOverrides.size) {
+    safeConfig.proxies = safeConfig.proxies.map((p) => p && dialerOverrides.has(p.name)
+      ? { ...p, 'dialer-proxy': dialerOverrides.get(p.name) } : p);
+  }
   const finalRules = buildRules(options.quicEnabled);
 
   if (options.fullConfig) {

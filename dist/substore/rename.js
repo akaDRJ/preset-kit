@@ -774,8 +774,7 @@ function operator(pro) {
   }
 
   proxies = proxies.filter((item) => item.name !== null);
-  jxh(proxies, sourceSequences);
-  if (numone) oneP(proxies);
+  proxies = numberGroups(proxies, sourceSequences);
   if (blpx) proxies = fampx(proxies);
   if (key) proxies = proxies.filter((item) => !keyb.test(item.name));
 
@@ -787,7 +786,7 @@ function getList(arg) {
   return COUNTRY_ROWS.map((row) => row[field]);
 }
 
-function jxh(items, sourceSequences = new Map()) {
+function numberGroups(items, sourceSequences) {
   const grouped = new Map();
   for (const item of items) {
     const name = item.name;
@@ -810,31 +809,12 @@ function jxh(items, sourceSequences = new Map()) {
         while (used.has(sequence)) sequence = String(next++).padStart(2, "0");
         used.add(sequence);
       }
-      expanded.push({ ...item, name: `${name}${XHFGF}${sequence}` });
+      const omitNumber = numone && group.length === 1 && sequence === "01";
+      expanded.push({ ...item, name: omitNumber ? name : `${name}${XHFGF}${sequence}` });
     });
   }
 
-  items.splice(0, items.length, ...expanded);
-  return items;
-}
-
-function oneP(items) {
-  const grouped = new Map();
-  for (const item of items) {
-    const baseName = item.name.replace(/[^A-Za-z0-9\u00C0-\u017F\u4E00-\u9FFF]+\d+$/, "");
-    if (!grouped.has(baseName)) {
-      grouped.set(baseName, []);
-    }
-    grouped.get(baseName).push(item);
-  }
-
-  for (const group of grouped.values()) {
-    const suffix = `${XHFGF}01`;
-    if (group.length === 1 && group[0].name.endsWith(suffix)) {
-      group[0].name = group[0].name.slice(0, -suffix.length);
-    }
-  }
-  return items;
+  return expanded;
 }
 
 function fampx(proxies) {
